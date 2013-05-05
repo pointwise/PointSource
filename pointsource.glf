@@ -8,99 +8,124 @@ package require PWI_Glyph 2.17.0
 namespace eval pw::PtSrc {
 }
 
-
 #############################################################################
-proc pw::PtSrc::getSelectType {} {
-    array set selInfo { \
-        2 Domain \
-        3 Block \
-    }
-    return $selInfo([pw::Application getCAESolverDimension])
-}
+proc pw::PtSrc::run { } {
+    set dim [pw::Application getCAESolverDimension]
+    if { [pw::_PtSrc::getSettings ent centerPt con errMsg] } {
+        puts "---------------------------"
+        puts "dimensionality: $dim"
+        puts "ent           : [$ent getName]"
+        puts "con           : [$con getName]"
+        puts "centerPt      : $centerPt"
+        puts "---------------------------"
 
-#############################################################################
-proc pw::PtSrc::selectPoint { ptVarName {prompt "Select point"} } {
-    upvar 1 $ptVarName pt
-    set ret 1
-    if { [catch {pw::Display selectPoint -description "$prompt"} pt] } {
-        set ret 0
-    }
-    return $ret
-}
+        set ptSrcEnts [pw::PtSrc::buildPointSource$dim $ent $centerPt $con]
 
+        puts "Initializing [$ent getName]..."
+        set solver [pw::Application begin UnstructuredSolver [list $ent]]
+        $solver run Initialize
+        $solver end
+        unset solver
+        puts "Initialization complete"
 
-########################################################################
-proc pw::PtSrc::getSelection { selType selectedVarName errMsgVarName } {
-    upvar 1 $selectedVarName selected
-    upvar 1 $errMsgVarName errMsg
-    array set validSelTypes { \
-        Connector 0 \
-        Domain    1 \
-        Block     2 \
-        Database  3 \
-        Spacing   4 \
-        Boundary  5 \
-    }
-    set ret 0
-    set selected {}
-
-    set allEnts [pw::Grid getAll -type "pw::$selType"]
-    set gridCnt 0
-    foreach ent $allEnts {
-        if { [$ent getEnabled] && [pw::Display isLayerVisible [$ent getLayer]] } {
-            incr gridCnt
-            lappend selected $ent
+        pw::Entity cycleColors $ptSrcEnts
+        foreach ptSrcEnt $ptSrcEnts {
+            $ptSrcEnt setRenderAttribute FillMode Shaded
         }
-    }
-
-    if { "" == [array get validSelTypes $selType] } {
-        set errMsg "Invalid Selection Type '$selType'"
-    } elseif { 0 == $gridCnt } {
-        set errMsg "No appropriate $selType entities are available for selection!"
-    } elseif { 1 == $gridCnt } {
-        # force selection of only $selType ent available
-        set ret 1
     } else {
-        # set selection based on current 2D/3D setting
-        set mask [pw::Display createSelectionMask -require$selType Defined]
-        if { ![pw::Display selectEntities \
-                -description "Select one $selType" \
-                -single \
-                -selectionmask $mask \
-                picks] } {
-            set errMsg "$selType selection aborted!"
-        } else {
-            set selected $picks($selType\s)
-            set ret 1
-        }
+        puts "ERROR: $errMsg"
+    }
+}
+
+
+#############################################################################
+proc pw::PtSrc::buildLayerData { ds growthRate numLayers } {
+    set ret [list]
+    for {set layer 0} {$layer < $numLayers} {incr layer} {
+        # calc layer's total radial distance from point source
+        set layerOffset [pw::_PtSrc::calcLayerOffset $ds $growthRate $layer]
+        # scale starting ds to the layer's ds
+        set layerDs [pw::_PtSrc::calcLayerDs $ds $growthRate $layer]
+        lappend ret [list $layerOffset $layerDs]
     }
     return $ret
 }
 
 
 #############################################################################
-proc pw::PtSrc::buildPointSource2 { ent centerPt ds growthRate numLayers } {
-    for {set layer 0} {$layer < $numLayers} {incr layer} {
-        buildNSLayer $centerPt $ds $growthRate $layer nsLayerPts
-        set pointSource($layer) $nsLayerPts
+proc pw::PtSrc::buildLayerDataFromCon { con } {
+    set ret [list]
+    set conDim [$con getDimensions]
+    set prevOffset 0.0
+    for {set ii 2} {$ii <= $conDim} {incr ii} {
+        # get layer's total radial distance as arc length to con pt ii
+        set layerOffset [$con getLength $ii]
+        set layerDs [expr {$layerOffset - $prevOffset}]
+        lappend ret [list $layerOffset $layerDs]
+        set prevOffset $layerOffset
     }
-    lappend cons [pw::_PtSrc::createCon [list $centerPt [lindex $pointSource(0) 0]]]
-    foreach {key ptList} [array get pointSource] {
-        lappend cons [pw::_PtSrc::createCon $ptList]
+    return $ret
+}
+
+
+#############################################################################
+proc pw::PtSrc::doBuildPointSource2 { dom centerPt layerData } {
+    set cons [list]
+    set edges [list]
+    foreach pair $layerData {
+        lassign $pair layerOffset layerDs
+        pw::_PtSrc::buildNSLayer $centerPt $layerDs $layerOffset nsLayerPts
+        set con [pw::_PtSrc::createCon $nsLayerPts]
+        set edge [pw::Edge create]
+        if { 0 == [llength $edges] } {
+            # capture center with con from center to first point in nsLayerPts
+            set centerCon [pw::_PtSrc::createCon [list $centerPt [lindex $nsLayerPts 0]]]
+            lappend cons $centerCon
+            # make edge with layer's con and centerCon
+            $edge addConnector $centerCon
+            $edge addConnector $con
+            $edge addConnector $con
+            $edge addConnector $centerCon
+        } else {
+            # make edge with layer's con only
+            $edge addConnector $con
+            $edge addConnector $con
+        }
+        lappend edges $edge
+        lappend cons $con
     }
+    # add new edges to dom
+    set mode [pw::Application begin Modify -notopology [list $dom]]
+    #set savedEdge1 [$dom getEdge 1]
+    #$dom removeEdges -preserve
+    #$dom addEdge $savedEdge1
+    foreach edge $edges {
+        $dom addEdge $edge
+    }
+    $mode end
+    unset mode
     return $cons
 }
 
 
 #############################################################################
-proc pw::PtSrc::buildPointSource3 { ent centerPt ds growthRate numLayers } {
-    for {set layer 0} {$layer < $numLayers} {incr layer} {
+proc pw::PtSrc::buildPointSource2 { dom centerPt con } {
+    set layerData [pw::PtSrc::buildLayerDataFromCon $con]
+    return [pw::PtSrc::doBuildPointSource2 $dom $centerPt $layerData]
+}
+
+
+#############################################################################
+proc pw::PtSrc::doBuildPointSource3 { blk centerPt layerData } {
+    set doms [list]
+    foreach pair $layerData {
+        lassign $pair layerOffset layerDs
         # build NorthSouth layer pts
-        pw::_PtSrc::buildNSLayer $centerPt $ds $growthRate $layer nsLayerPts
+        pw::_PtSrc::buildNSLayer $centerPt $layerDs $layerOffset nsLayerPts
         # only need pts from north to south pole inclusive
         set nsLayerPts [lrange $nsLayerPts 0 [expr {[llength $nsLayerPts] / 2}]]
         set con1 [pw::_PtSrc::createCon $nsLayerPts]
-        if { 0 == $layer } {
+        if { 0 == [llength $doms] } {
             # build semi-circle center dom
             set con2 [pw::_PtSrc::createCon [list [lindex $nsLayerPts 0] $centerPt [lindex $nsLayerPts end]]]
             lappend doms [pw::DomainUnstructured createFromConnectors [list $con1 $con2]]
@@ -117,7 +142,7 @@ proc pw::PtSrc::buildPointSource3 { ent centerPt ds growthRate numLayers } {
         for {set jj 1} {$jj <= $numEwPts} {incr jj} {
             set nsPt [lindex $nsLayerPts $jj]
             # build EastWest layer pts
-            pw::_PtSrc::buildEWLayer $centerPt $nsPt $ds $growthRate $layer ewLayerPts
+            pw::_PtSrc::buildEWLayer $centerPt $nsPt $layerDs ewLayerPts
             set ewMidCnt [expr {[llength $ewLayerPts] / 2}]
             set con1a [pw::_PtSrc::createCon [lrange $ewLayerPts 0 $ewMidCnt]]
             set con1b [pw::_PtSrc::createCon [lrange $ewLayerPts $ewMidCnt end]]
@@ -138,10 +163,9 @@ proc pw::PtSrc::buildPointSource3 { ent centerPt ds growthRate numLayers } {
 
     # run solver on doms using a large min edge length to prevent insertion of
     # interior points. Do this before joining to preserve the edge point positions.
-    set maxDs [pw::_PtSrc::calcLayerDs $ds $growthRate $numLayers]
     set colxn [pw::Collection create]
     $colxn set $doms
-    $colxn do setUnstructuredSolverAttribute EdgeMinimumLength [expr {$maxDs * 10}]
+    $colxn do setUnstructuredSolverAttribute EdgeMinimumLength [expr {$layerDs * 10}]
     $colxn delete
     unset colxn
     set solver [pw::Application begin UnstructuredSolver $doms]
@@ -159,10 +183,17 @@ proc pw::PtSrc::buildPointSource3 { ent centerPt ds growthRate numLayers } {
         set face [pw::FaceUnstructured create]
         $face addDomain $dom
         $face setBaffle true
-        $ent addFace $face
+        $blk addFace $face
     }
 
     return $doms
+}
+
+
+#############################################################################
+proc pw::PtSrc::buildPointSource3 { blk centerPt con } {
+    set layerData [pw::PtSrc::buildLayerDataFromCon $con]
+    return [pw::PtSrc::doBuildPointSource3 $blk $centerPt $layerData]
 }
 
 
@@ -217,7 +248,7 @@ namespace eval pw::_PtSrc {
 
 
     #------------------------------------------------------------------------
-    proc buildLayer { axis centerPt ds layerOffset ptsVarName } {
+    proc buildLayer { axis centerPt layerDs layerOffset ptsVarName } {
         upvar $ptsVarName layerPts
         variable PI
 
@@ -238,10 +269,10 @@ namespace eval pw::_PtSrc {
         }
         }
 
-        # calc numSegs by dividing half circumfrence (PI * layerOffset) by ds and
+        # calc numSegs by dividing half circumfrence (PI * layerOffset) by layerDs and
         # round to the nearest int. This will give segment arc lengths as close as
-        # possible to the desired layer ds
-        set numSegs [expr {round($PI * $layerOffset / $ds)}]
+        # possible to the desired layer layerDs
+        set numSegs [expr {round($PI * $layerOffset / $layerDs)}]
         set segAngle [expr {180.0 / $numSegs}]
         # Build layerPts around the origin. Offset them to centerPt later.
         set layerPts {}
@@ -288,7 +319,10 @@ namespace eval pw::_PtSrc {
                 set edge [$dom getEdge $ii]
                 set numCons [$edge getConnectorCount]
                 for {set jj 1} {$jj <= $numCons} {incr jj} {
-                    set conArray([$edge getConnector $jj]) 1
+                    set con [$edge getConnector $jj]
+                    if { [$con getDimensions] <= 3 } {
+                        set conArray($con) 1
+                    }
                 }
             }
         }
@@ -298,21 +332,14 @@ namespace eval pw::_PtSrc {
 
 
     #------------------------------------------------------------------------
-    proc buildNSLayer { centerPt ds growthRate layer ptsVarName } {
+    proc buildNSLayer { centerPt layerDs layerOffset ptsVarName } {
         upvar $ptsVarName layerPts
-
-        # calc total radial distance from centerPt to layer
-        set layerOffset [calcLayerOffset $ds $growthRate $layer]
-
-        # scale starting ds to the layer's ds
-        set ds [calcLayerDs $ds $growthRate $layer]
-
-        buildLayer Z $centerPt $ds $layerOffset layerPts
+        buildLayer Z $centerPt $layerDs $layerOffset layerPts
     }
 
 
     #------------------------------------------------------------------------
-    proc buildEWLayer { centerPt nsPt ds growthRate layer ptsVarName } {
+    proc buildEWLayer { centerPt nsPt layerDs ptsVarName } {
         upvar $ptsVarName layerPts
 
         # move centerPt to the same y-plane as nsPt
@@ -322,9 +349,9 @@ namespace eval pw::_PtSrc {
         set layerOffset [distance $centerPt $nsPt]
 
         # scale starting ds to the layer's ds
-        set ds [calcLayerDs $ds $growthRate $layer]
+        #set ds [calcLayerDs $ds $growthRate $layer]
 
-        buildLayer Y $centerPt $ds $layerOffset layerPts
+        buildLayer Y $centerPt $layerDs $layerOffset layerPts
         set layerPts [lrange $layerPts 1 end]
     }
 
@@ -343,6 +370,101 @@ namespace eval pw::_PtSrc {
         unset seg
         return $con
     }
+
+
+    #------------------------------------------------------------------------
+    proc getSelectType {} {
+        array set selInfo { \
+            2 Domain \
+            3 Block \
+        }
+        return $selInfo([pw::Application getCAESolverDimension])
+    }
+
+
+    #------------------------------------------------------------------------
+    proc selectPoint { ptVarName {prompt "Select point"} } {
+        upvar 1 $ptVarName pt
+        set ret 1
+        if { [catch {pw::Display selectPoint -description "$prompt"} pt] } {
+            set ret 0
+        }
+        return $ret
+    }
+
+
+    #------------------------------------------------------------------------
+    proc getSelection { selType selectedVarName errMsgVarName } {
+        upvar 1 $selectedVarName selected
+        upvar 1 $errMsgVarName errMsg
+        array set validSelTypes { \
+            Connector Dimensioned \
+            Domain    Defined \
+            Block     Defined \
+            Database  {} \
+            Spacing   {} \
+            Boundary  {} \
+        }
+        set ret 0
+        set selected {}
+
+        set allEnts [pw::Grid getAll -type "pw::$selType"]
+        set gridCnt 0
+        foreach ent $allEnts {
+            if { [$ent getEnabled] && [pw::Display isLayerVisible [$ent getLayer]] } {
+                incr gridCnt
+                lappend selected $ent
+            }
+        }
+
+        if { "" == [array get validSelTypes $selType] } {
+            set errMsg "Invalid Selection Type '$selType'"
+        } elseif { 0 == $gridCnt } {
+            set errMsg "No appropriate $selType entities are available for selection!"
+        } elseif { 1 == $gridCnt } {
+            # force selection of only $selType ent available
+            set ret 1
+        } else {
+            # set selection based on current 2D/3D setting
+            set mask [pw::Display createSelectionMask -require$selType $validSelTypes($selType)]
+            if { ![pw::Display selectEntities \
+                    -description "Select one $selType" \
+                    -single \
+                    -selectionmask $mask \
+                    picks] } {
+                set errMsg "$selType selection aborted!"
+            } else {
+                set selected $picks($selType\s)
+                set ret 1
+            }
+        }
+        return $ret
+    }
+
+
+    #------------------------------------------------------------------------
+    proc getSettings { selectedVarName centerPtVarName conVarName errMsgVarName } {
+        upvar 1 $selectedVarName selected
+        upvar 1 $centerPtVarName centerPt
+        upvar 1 $conVarName con
+        upvar 1 $errMsgVarName errMsg
+        set selType [getSelectType]
+        set ret 0
+        if { ![getSelection $selType selected errMsg] } {
+            # failed
+        } elseif { ![selectPoint centerPt "Select point source location"] } {
+            set errMsg "Center point selection aborted!"
+        } elseif { ![getSelection Connector con errMsg] } {
+            # failed
+        } else {
+            set ret 1
+        }
+        return $ret
+    }
 }
 
 } ;# ![namespace exists pw::_PtSrc]
+
+if { ![info exists disableAutoRun_PtSrc] } {
+    pw::PtSrc::run
+}
