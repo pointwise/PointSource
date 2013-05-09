@@ -1,15 +1,12 @@
 # glyph-pointsource
----------------------------------------
 A Glyph script for inserting a 2D or 3D point source into a grid.
-
-![PointSourceExamples](https://raw.github.com/dbgarlisch/glyph-pointsource/master/ScriptImage.png "Point Source Example Image")
 
 ![Point Source Example Image][1]
 
 [1]: https://raw.github.com/dbgarlisch/glyph-pointsource/master/ScriptImage.png  "Point Source Example Image"
 
+
 ## Generating Geometry
----------------------------------------
 This script inserts a point source into an existing grid block or domain.
 
 The script detects the grid's CAE dimensionality and prompts for input
@@ -32,8 +29,8 @@ the script.
 
 The script does *not* check if a point source pierces the containing block or domain.
 
+
 ## Running The Script
----------------------------------------
 
 * Build or open the grid into which you want to insert a point source.
 * Execute this script.
@@ -46,8 +43,8 @@ The script does *not* check if a point source pierces the containing block or do
 * Select the connector to use for the point source layer spacing.
 * Wait for the script to finish.
 
+
 ## Sourcing This Script
----------------------------------------
 
 It is possible to source this script in your own Glyph scripts and use it as a library.
 
@@ -58,58 +55,52 @@ To source this script add the following lines to your script:
 
 See the scripts `test/test2D.glf` and `test/test3D.glf` for examples.
 
+
 ### pw::PtSrc Library Docs
 
-    *proc pw::PtSrc::buildLayerData { ds growthRate numLayers }*
+#### proc pw::PtSrc::buildLayerData { ds growthRate numLayers }
+Build a point source layer data list using an initial spacing, growth
+    rate and number of layers.
 
-        Build a point source layer data list using an initial spacing, growth
-        rate and number of layers.
+    ds         - Initial layer spacing (float).
+    growthRate - Layer spacing growth rate (float).
+    numLayers  - Number of concentric layers (integer).
 
-        ds         - Initial layer spacing (float).
-        growthRate - Layer spacing growth rate (float).
-        numLayers  - Number of concentric layers (integer).
+#### proc pw::PtSrc::buildLayerDataFromCon { con }
+Build a point source layer data list using a connector.
 
-    *proc pw::PtSrc::buildLayerDataFromCon { con }*
+    con - A pointwise connector object.
 
-        Build a point source layer data list using a connector.
+#### proc pw::PtSrc::doBuildPointSource2 { dom centerPt layerData }
+Build a 2D point source using a layer data list.
 
-        con - A pointwise connector object.
+    dom       - A pointwise domain object.
+    centerPt  - The center point {x y z}.
+    layerData - The layer spacing list {{r0 ds0} ... {rN dsN}}.
 
-    *proc pw::PtSrc::doBuildPointSource2 { dom centerPt layerData }*
+#### proc pw::PtSrc::buildPointSource2 { dom centerPt con }
+Build a 2D point source using a connector.
 
-        Build a 2D point source using a layer data list.
+    dom      - A pointwise domain object.
+    centerPt - The center point {x y z}.
+    con      - A pointwise connector object.
 
-        dom       - A pointwise domain object.
-        centerPt  - The center point {x y z}.
-        layerData - The layer spacing list {{r0 ds0} ... {rN dsN}}.
+#### proc pw::PtSrc::doBuildPointSource3 { blk centerPt layerData }
+Build a 3D point source using a layer data list.
 
-    *proc pw::PtSrc::buildPointSource2 { dom centerPt con }*
+    blk       - A pointwise block object.
+    centerPt  - The center point {x y z}.
+    layerData - The layer spacing list {{r0 ds0} ... {rN dsN}}.
 
-        Build a 2D point source using a connector.
+#### proc pw::PtSrc::buildPointSource3 { blk centerPt con }
+Build a 3D point source using a connector.
 
-        dom      - A pointwise domain object.
-        centerPt - The center point {x y z}.
-        con      - A pointwise connector object.
-
-    *proc pw::PtSrc::doBuildPointSource3 { blk centerPt layerData }*
-
-        Build a 3D point source using a layer data list.
-
-        blk       - A pointwise block object.
-        centerPt  - The center point {x y z}.
-        layerData - The layer spacing list {{r0 ds0} ... {rN dsN}}.
-
-    *proc pw::PtSrc::buildPointSource3 { blk centerPt con }*
-
-        Build a 3D point source using a connector.
-
-        blk       - A pointwise block object.
-        centerPt  - The center point {x y z}.
-        con      - A pointwise connector object.
+    blk       - A pointwise block object.
+    centerPt  - The center point {x y z}.
+    con      - A pointwise connector object.
 
 
 ## Disclaimer
----------------------------------------
 Scripts are freely provided. They are not supported products of
 Pointwise, Inc. Some scripts have been written and contributed by third
 parties outside of Pointwise's control.
