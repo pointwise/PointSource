@@ -50,8 +50,8 @@ It is possible to source this script in your own Glyph scripts and use it as a l
 
 To source this script add the following lines to your script:
 
-    > set disableAutoRun_PtSrc 1 ;# disable the autorun
-    > source "/some/path/to/your/copy/of/pointsource.glf"]
+    set disableAutoRun_PtSrc 1 ;# disable the autorun
+    source "/some/path/to/your/copy/of/pointsource.glf"]
 
 See the scripts `test/test2D.glf` and `test/test3D.glf` for examples.
 
@@ -98,6 +98,41 @@ Build a 3D point source using a connector.
     blk       - A pointwise block object.
     centerPt  - The center point {x y z}.
     con      - A pointwise connector object.
+
+
+### pw::PtSrc Library Usage Examples
+
+#### Creating a 2D Point Source Using a Connector
+    set dom [pw::Grid getByName "dom-1"]
+    set pt {13.546179 12.470546  7.7679454}
+    set con [pw::Grid getByName "con-1"]
+    pw::PtSrc::buildPointSource2 $dom $pt $con
+
+#### Creating a 2D Point Source Using Initial Spacing, Growth Rate and Number of Layers
+    set ds         0.1
+    set growthRate 1.3
+    set numLayers  5
+    set layerData [pw::PtSrc::buildLayerData $ds $growthRate $numLayers]
+
+    set dom [pw::Grid getByName "dom-1"]
+    set pt {5.7 5.5 14.4}
+    pw::PtSrc::doBuildPointSource2 $dom $pt $layerData
+
+#### Creating a 3D Point Source Using a Connector
+    set blk [pw::Grid getByName "blk-1"]
+    set pt {13.546179 12.470546  7.7679454}
+    set con [pw::Grid getByName "con-1"]
+    pw::PtSrc::buildPointSource3 $blk $pt $con
+
+#### Creating a 3D Point Source Using Initial Spacing, Growth Rate and Number of Layers
+    set ds         0.1
+    set growthRate 1.3
+    set numLayers  5
+    set layerData [pw::PtSrc::buildLayerData $ds $growthRate $numLayers]
+
+    set blk [pw::Grid getByName "blk-1"]
+    set pt {5.7 5.5 14.4}
+    pw::PtSrc::doBuildPointSource3 $blk $pt $layerData
 
 
 ## Disclaimer
