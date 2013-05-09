@@ -1,6 +1,26 @@
+#
+# Copyright 2013 (c) Pointwise, Inc.
+# All rights reserved.
+#
+# This sample script is not supported by Pointwise, Inc.
+# It is provided freely for demonstration purposes only.
+# SEE THE WARRANTY DISCLAIMER AT THE BOTTOM OF THIS FILE.
+#
+
+
+# ===============================================
+# 2D and 3D point source mesh generator
+# ===============================================
+# https://github.com/pointwise/PointSource
+#
+# Vnn: Release Date / Author
+# v01: May 08, 2013 / David Garlisch
+#
+# ===============================================
+
 if { ![namespace exists pw::_PtSrc] } {
 
-package require PWI_Glyph 2.17.0
+package require PWI_Glyph
 
 #####################################################################
 #                       public namespace procs
