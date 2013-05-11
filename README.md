@@ -27,8 +27,9 @@ connector's distribution. One point source layer will be create for each
 connector point *except* for the first. The connector must exist before running
 the script.
 
-The script does *not* check if a point source pierces the containing block or domain.
-
+### Limitations
+* The script does *not* check if a point source pierces a boundary of the targeted block or domain.
+* 2D point sources are built in an XY plane.
 
 ## Running The Script
 
