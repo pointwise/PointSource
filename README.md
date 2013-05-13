@@ -1,9 +1,9 @@
-# glyph-pointsource
+# PointSource
 A Glyph script for inserting a 2D or 3D point source into a grid.
 
 ![Point Source Example Image][1]
 
-[1]: https://raw.github.com/dbgarlisch/glyph-pointsource/master/ScriptImage.png  "Point Source Example Image"
+[1]: https://raw.github.com/pointwise/PointSource/master/ScriptImage.png  "Point Source Example Image"
 
 
 ## Generating Geometry
